@@ -84,14 +84,17 @@ function VideoMockup({ mouseX, mouseY }: { mouseX: ReturnType<typeof useMotionVa
         <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
           <video
             ref={videoRef}
-            src="/hero-demo.mp4"
             autoPlay
             muted
             loop
             playsInline
+            preload="auto"
             className="w-full h-full object-cover"
             style={{ display: 'block' }}
-          />
+          >
+            <source src="/hero-demo.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
           {/* Subtle vignette overlay */}
           <div
             className="absolute inset-0 pointer-events-none"
