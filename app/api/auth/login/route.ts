@@ -36,13 +36,10 @@ export async function POST(req: NextRequest) {
         // Guarantee database is populated with sample users & collections
         await ensureDatabaseSeeded().catch((e) => console.warn('Login auto-seed warning:', e));
 
-        let user = await User.findOne({
-          $or: [
-            { email: lookupEmail },
-            { email: email },
-            { role: email === 'devops' ? 'devops_engineer' : email === 'pm' ? 'project_manager' : email }
-          ]
-        }).select('+password');
+        let user = await User.findOne({ email: lookupEmail }).select('+password');
+        if (!user && email !== lookupEmail) {
+          user = await User.findOne({ email }).select('+password');
+        }
 
         if (user) {
           const isMatch = user.password ? await comparePassword(password, user.password) : false;

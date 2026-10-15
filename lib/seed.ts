@@ -1,10 +1,10 @@
-import User from '@/models/User';
-import Resource from '@/models/Resource';
-import Deployment from '@/models/Deployment';
-import Environment from '@/models/Environment';
-import Incident from '@/models/Incident';
-import Request from '@/models/Request';
-import AuditLog from '@/models/AuditLog';
+import User, { IUser } from '@/models/User';
+import Resource, { IResource } from '@/models/Resource';
+import Deployment, { IDeployment } from '@/models/Deployment';
+import Environment, { IEnvironment } from '@/models/Environment';
+import Incident, { IIncident } from '@/models/Incident';
+import Request, { IRequest } from '@/models/Request';
+import AuditLog, { IAuditLog } from '@/models/AuditLog';
 import { hashPassword } from '@/lib/auth';
 
 let isSeeding = false;
@@ -34,7 +34,6 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
   }
 
   if (isSeeding) {
-    // Wait briefly if another seed request is in flight
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return {
       users: await User.countDocuments().catch(() => 0),
@@ -53,9 +52,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
     const defaultPassword = await hashPassword('admin');
 
     // 1. Ensure all 4 default users exist with known credentials
-    let admin = await User.findOne({
-      $or: [{ email: 'admin@devopsplatform.local' }, { role: 'admin' }],
-    });
+    let admin = await User.findOne({ email: 'admin@devopsplatform.local' });
     if (!admin) {
       admin = await User.create({
         name: 'System Administrator',
@@ -69,9 +66,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
       await admin.save();
     }
 
-    let devops = await User.findOne({
-      $or: [{ email: 'devops-eng@devopsplatform.local' }, { role: 'devops_engineer' }],
-    });
+    let devops = await User.findOne({ email: 'devops-eng@devopsplatform.local' });
     if (!devops) {
       devops = await User.create({
         name: 'Jay Jobanputra (DevOps)',
@@ -85,9 +80,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
       await devops.save();
     }
 
-    let pm = await User.findOne({
-      $or: [{ email: 'pm-lead@devopsplatform.local' }, { role: 'project_manager' }],
-    });
+    let pm = await User.findOne({ email: 'pm-lead@devopsplatform.local' });
     if (!pm) {
       pm = await User.create({
         name: 'Sarah Connor (PM)',
@@ -101,9 +94,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
       await pm.save();
     }
 
-    let viewer = await User.findOne({
-      $or: [{ email: 'viewer@devopsplatform.local' }, { role: 'viewer' }],
-    });
+    let viewer = await User.findOne({ email: 'viewer@devopsplatform.local' });
     if (!viewer) {
       viewer = await User.create({
         name: 'Management Viewer',
@@ -121,10 +112,10 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
     const envCount = await Environment.countDocuments();
     if (envCount === 0) {
       const envs = [
-        { name: 'dev', description: 'Local sandbox and branch testing', status: 'active', createdBy: admin._id },
-        { name: 'staging', description: 'Release preview and QA validation', status: 'active', createdBy: admin._id },
-        { name: 'prod', description: 'Live user-facing infrastructure cluster', status: 'active', createdBy: admin._id },
-        { name: 'preprod', description: 'Beta canary test namespace', status: 'archived', createdBy: admin._id },
+        { name: 'dev', description: 'Local sandbox and branch testing', status: 'active' as const, createdBy: admin._id },
+        { name: 'staging', description: 'Release preview and QA validation', status: 'active' as const, createdBy: admin._id },
+        { name: 'prod', description: 'Live user-facing infrastructure cluster', status: 'active' as const, createdBy: admin._id },
+        { name: 'preprod', description: 'Beta canary test namespace', status: 'archived' as const, createdBy: admin._id },
       ];
       for (const env of envs) {
         await Environment.create(env);
@@ -137,33 +128,33 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
       const resourcesData = [
         {
           name: 'vm-prod-gateway',
-          type: 'server',
+          type: 'server' as const,
           environment: 'prod',
-          status: 'healthy',
+          status: 'healthy' as const,
           specs: { cpu: 8, ram: 32, region: 'us-east-1' },
           owner: devops._id,
         },
         {
           name: 'mongodb-cluster-main',
-          type: 'database',
+          type: 'database' as const,
           environment: 'prod',
-          status: 'degraded',
+          status: 'degraded' as const,
           specs: { cpu: 16, ram: 64, region: 'us-east-1' },
           owner: devops._id,
         },
         {
           name: 'redis-cache-staging',
-          type: 'service',
+          type: 'service' as const,
           environment: 'staging',
-          status: 'healthy',
+          status: 'healthy' as const,
           specs: { cpu: 4, ram: 16, region: 'us-west-2' },
           owner: devops._id,
         },
         {
           name: 'docker-worker-node',
-          type: 'container',
+          type: 'container' as const,
           environment: 'dev',
-          status: 'down',
+          status: 'down' as const,
           specs: { cpu: 2, ram: 8, region: 'ap-south-1' },
           owner: devops._id,
         },
@@ -184,7 +175,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
           resourceId: resourceDocs[0]._id,
           version: 'v2.10.4',
           commitHash: '72ea95c1c8a14b9',
-          status: 'success',
+          status: 'success' as const,
           previousVersion: 'v2.10.3',
           deployedBy: devops._id,
           deployedAt: new Date(Date.now() - 3600000 * 24),
@@ -193,7 +184,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
           resourceId: resourceDocs[1]?._id || resourceDocs[0]._id,
           version: 'v5.0.12-rc1',
           commitHash: 'db925cf15fa8b30',
-          status: 'failed',
+          status: 'failed' as const,
           previousVersion: 'v5.0.11',
           deployedBy: devops._id,
           deployedAt: new Date(Date.now() - 3600000 * 18),
@@ -202,7 +193,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
           resourceId: resourceDocs[2]?._id || resourceDocs[0]._id,
           version: 'v1.4.0',
           commitHash: 'ab8836decf1899a',
-          status: 'success',
+          status: 'success' as const,
           previousVersion: 'v1.3.9',
           deployedBy: devops._id,
           deployedAt: new Date(Date.now() - 3600000 * 12),
@@ -211,7 +202,7 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
           resourceId: resourceDocs[3]?._id || resourceDocs[0]._id,
           version: 'v0.9.1-beta',
           commitHash: '00f34c9c82b13e5',
-          status: 'rolled_back',
+          status: 'rolled_back' as const,
           previousVersion: 'v0.9.0',
           deployedBy: devops._id,
           deployedAt: new Date(Date.now() - 3600000 * 4),
@@ -233,8 +224,8 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
         {
           title: 'Primary database replica out of sync',
           description: 'Mongoose primary cluster failed replication checks. Auto-failover triggered secondary read-only sync mode.',
-          severity: 'high',
-          status: 'in_progress',
+          severity: 'high' as const,
+          status: 'in_progress' as const,
           resourceId: resourceDocs[1]?._id || resourceDocs[0]._id,
           deploymentId: deploymentDocs[1]?._id || deploymentDocs[0]?._id,
           createdBy: admin._id,
@@ -242,8 +233,8 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
         {
           title: 'Container disk layout configuration issue',
           description: 'Docker agent reported zero capacity on dev cache mounting pools. Worker node suspended tasks.',
-          severity: 'critical',
-          status: 'open',
+          severity: 'critical' as const,
+          status: 'open' as const,
           resourceId: resourceDocs[3]?._id || resourceDocs[0]._id,
           deploymentId: deploymentDocs[3]?._id || deploymentDocs[0]?._id,
           createdBy: admin._id,
@@ -251,8 +242,8 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
         {
           title: 'API Gateway memory exhaustion warnings',
           description: 'Gateway container exceeded 90% memory threshold. Node gracefully restarted and freed heap allocation.',
-          severity: 'low',
-          status: 'resolved',
+          severity: 'low' as const,
+          status: 'resolved' as const,
           resourceId: resourceDocs[0]._id,
           resolvedAt: new Date(),
           resolvedBy: admin._id,
@@ -271,34 +262,34 @@ export async function ensureDatabaseSeeded(force: boolean = false): Promise<Seed
       const requestsData = [
         {
           name: 'vm-staging-redis',
-          type: 'service',
+          type: 'service' as const,
           specs: { cpu: 2, ram: 8, region: 'us-west-2' },
           environment: 'staging',
           purpose: 'Required for QA performance testing cluster cache namespace',
           duration: 15,
-          status: 'pending',
+          status: 'pending' as const,
           requestedBy: devops._id,
         },
         {
           name: 'k8s-prod-cluster-02',
-          type: 'container',
+          type: 'container' as const,
           specs: { cpu: 32, ram: 128, region: 'us-east-1' },
           environment: 'prod',
           purpose: 'Additional node pool to scale deployment loads during Q3 launch',
           duration: 90,
-          status: 'provisioned',
+          status: 'provisioned' as const,
           requestedBy: devops._id,
           resolvedBy: pm._id,
           comments: 'Approved to scale live load',
         },
         {
           name: 'db-dev-replica',
-          type: 'database',
+          type: 'database' as const,
           specs: { cpu: 4, ram: 16, region: 'ap-south-1' },
           environment: 'dev',
           purpose: 'Duplicate dev replica for sandbox testing',
           duration: 7,
-          status: 'rejected',
+          status: 'rejected' as const,
           requestedBy: devops._id,
           resolvedBy: pm._id,
           comments: 'Rejected. Please reuse existing shared dev database resources.',
