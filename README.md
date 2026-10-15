@@ -14,11 +14,27 @@ A modern DevOps Resource Management Platform built to monitor and manage infrast
 ## Getting Started
 
 First, configure your environment variables:
-1. Copy `.env.local` placeholders and fill in the values:
-   ```bash
-   MONGODB_URI=your-mongodb-connection-string
-   JWT_SECRET=your-secret-key
-   ```
+
+1. Copy `.env.example` to `.env.local`.
+2. For local MongoDB, use this default connection string:
+
+```bash
+MONGODB_URI=mongodb://admin:admin@127.0.0.1:27017/devops-resource-management?authSource=admin
+JWT_SECRET=your-secret-key
+```
+
+For Vercel deployment, set the same variable as:
+
+```bash
+MONGODB_URI=mongodb+srv://admin:admin@your-cluster.mongodb.net/devops-resource-management?retryWrites=true&w=majority
+```
+
+### Default local login
+
+Use these credentials for local testing:
+
+- Email: `admin@devopsplatform.local` or `admin`
+- Password: `admin`
 
 Then, run the development server:
 

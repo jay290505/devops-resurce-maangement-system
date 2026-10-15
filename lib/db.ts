@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/devops-resource-management';
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URI ||
+  'mongodb://admin:admin@127.0.0.1:27017/devops-resource-management?authSource=admin';
 
 interface MongooseCache {
   conn: typeof mongoose | null;

@@ -1,51 +1,48 @@
 import dbConnect from '../lib/db';
 import User from '../models/User';
 import mongoose from 'mongoose';
+import { hashPassword } from '../lib/auth';
 
 async function main() {
   console.log('--- MongoDB Connection & Initialization Test ---');
-  console.log('Target URI:', process.env.MONGODB_URI);
+  console.log('Target URI:', process.env.MONGODB_URI || process.env.MONGO_URI);
 
   try {
-    // 1. Establish connection
     console.log('\nConnecting to MongoDB...');
     await dbConnect();
     console.log('✓ Successfully connected to MongoDB!');
 
-    // 2. Perform a test write (databases in Mongo are created lazily on first insert)
-    const testEmail = 'test-admin@devopsplatform.local';
-    
-    console.log(`\nChecking if test user exists: ${testEmail}...`);
-    let user = await User.findOne({ email: testEmail });
-    
+    const defaultAdminEmail = 'admin@devopsplatform.local';
+    const defaultAdminPassword = await hashPassword('admin');
+
+    console.log(`\nChecking if default admin exists: ${defaultAdminEmail}...`);
+    let user = await User.findOne({ email: defaultAdminEmail });
+
     if (!user) {
-      console.log('No test user found. Creating one to initialize database...');
+      console.log('No default admin found. Creating the default admin user...');
       user = await User.create({
         name: 'System Administrator',
-        email: testEmail,
-        password: 'temporarypassword123', // Just a placeholder
+        email: defaultAdminEmail,
+        password: defaultAdminPassword,
         role: 'admin',
       });
-      console.log('✓ Test user created successfully:');
-      console.log(JSON.stringify(user, null, 2));
+      console.log('✓ Default admin created successfully.');
     } else {
-      console.log('✓ Test user already exists in database:');
-      console.log(JSON.stringify(user, null, 2));
+      console.log('✓ Default admin already exists in database.');
     }
 
     console.log('\n======================================================');
-    console.log('SUCCESS: The database and collections have been created!');
-    console.log('You can now see the "devops-resource-management" database');
-    console.log('in your MongoDB Compass or local mongo shell.');
+    console.log('SUCCESS: The database and default admin user are ready!');
+    console.log('Default login credentials:');
+    console.log(`Email: ${defaultAdminEmail}`);
+    console.log('Password: admin');
     console.log('======================================================');
-
   } catch (error) {
     console.error('\n❌ ERROR: Failed to connect to or query MongoDB.');
     console.error('Please make sure your MongoDB server is running locally on port 27017');
     console.error('or that your MONGODB_URI in .env.local is correct.');
     console.error('\nTechnical Error details:', error);
   } finally {
-    // Close connection
     await mongoose.connection.close();
     console.log('\nDatabase connection closed.');
   }
