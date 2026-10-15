@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Environment from '@/models/Environment';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 import mongoose from 'mongoose';
 
 /**
@@ -13,11 +14,20 @@ export async function GET(req: NextRequest) {
     try {
       const db = await dbConnect();
       if (db) {
-        const environments = await Environment.find({})
+        let environments = await Environment.find({})
           .populate('createdBy', 'name email')
           .sort({ createdAt: -1 });
 
-        return NextResponse.json(environments);
+        if (environments.length === 0) {
+          await ensureDatabaseSeeded().catch(() => {});
+          environments = await Environment.find({})
+            .populate('createdBy', 'name email')
+            .sort({ createdAt: -1 });
+        }
+
+        if (environments.length > 0) {
+          return NextResponse.json(environments);
+        }
       }
     } catch (error) {
       console.warn('DB fetch environments failed, using mock store:', error);

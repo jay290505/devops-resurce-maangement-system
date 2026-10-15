@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import User from '@/models/User';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 
 /**
  * GET /api/users
@@ -15,8 +16,14 @@ export async function GET(req: NextRequest) {
       try {
         const db = await dbConnect();
         if (db) {
-          const users = await User.find({}, 'name email role createdAt').sort({ createdAt: -1 });
-          return NextResponse.json(users);
+          let users = await User.find({}, 'name email role createdAt').sort({ createdAt: -1 });
+          if (users.length < 4) {
+            await ensureDatabaseSeeded().catch(() => {});
+            users = await User.find({}, 'name email role createdAt').sort({ createdAt: -1 });
+          }
+          if (users.length > 0) {
+            return NextResponse.json(users);
+          }
         }
       } catch (dbErr) {
         console.warn('DB fetch users error, using mock store:', dbErr);

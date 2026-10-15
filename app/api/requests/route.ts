@@ -4,6 +4,7 @@ import Request from '@/models/Request';
 import AuditLog from '@/models/AuditLog';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 import mongoose from 'mongoose';
 
 /**
@@ -17,17 +18,27 @@ export async function GET(req: NextRequest) {
         try {
           const db = await dbConnect();
           if (db) {
-            let query = {};
+            let query: Record<string, unknown> = {};
             if (user.role === 'devops_engineer' || user.role === 'viewer') {
               query = { requestedBy: user.userId };
             }
 
-            const requests = await Request.find(query)
+            let requests = await Request.find(query)
               .populate('requestedBy', 'name email role')
               .populate('resolvedBy', 'name email role')
               .sort({ createdAt: -1 });
 
-            return NextResponse.json(requests);
+            if (requests.length === 0) {
+              await ensureDatabaseSeeded().catch(() => {});
+              requests = await Request.find(query)
+                .populate('requestedBy', 'name email role')
+                .populate('resolvedBy', 'name email role')
+                .sort({ createdAt: -1 });
+            }
+
+            if (requests.length > 0) {
+              return NextResponse.json(requests);
+            }
           }
         } catch (dbErr) {
           console.warn('DB fetch requests failed, using mock store:', dbErr);

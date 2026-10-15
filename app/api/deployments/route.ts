@@ -4,6 +4,7 @@ import Deployment from '@/models/Deployment';
 import Resource from '@/models/Resource';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 
 /**
  * GET /api/deployments
@@ -13,12 +14,22 @@ export async function GET(req: NextRequest) {
     try {
       const db = await dbConnect();
       if (db) {
-        const deployments = await Deployment.find({})
+        let deployments = await Deployment.find({})
           .populate('resourceId', 'name environment status')
           .populate('deployedBy', 'name email')
           .sort({ deployedAt: -1 });
 
-        return NextResponse.json(deployments);
+        if (deployments.length === 0) {
+          await ensureDatabaseSeeded().catch(() => {});
+          deployments = await Deployment.find({})
+            .populate('resourceId', 'name environment status')
+            .populate('deployedBy', 'name email')
+            .sort({ deployedAt: -1 });
+        }
+
+        if (deployments.length > 0) {
+          return NextResponse.json(deployments);
+        }
       }
     } catch (error) {
       console.warn('DB deployments fetch error, using mock store:', error);

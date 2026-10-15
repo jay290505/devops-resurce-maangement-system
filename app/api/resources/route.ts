@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Resource from '@/models/Resource';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 import mongoose from 'mongoose';
 
 /**
@@ -15,11 +16,20 @@ export async function GET(req: NextRequest) {
     try {
       const db = await dbConnect();
       if (db) {
-        const resources = await Resource.find({})
+        let resources = await Resource.find({})
           .populate('owner', 'name email')
           .sort({ createdAt: -1 });
 
-        return NextResponse.json(resources);
+        if (resources.length === 0) {
+          await ensureDatabaseSeeded().catch(() => {});
+          resources = await Resource.find({})
+            .populate('owner', 'name email')
+            .sort({ createdAt: -1 });
+        }
+
+        if (resources.length > 0) {
+          return NextResponse.json(resources);
+        }
       }
     } catch (error) {
       console.warn('DB fetch resources failed, using mock store:', error);

@@ -4,6 +4,7 @@ import Incident from '@/models/Incident';
 import Resource from '@/models/Resource';
 import { requireRole } from '@/lib/auth';
 import { mockStore } from '@/lib/mockStore';
+import { ensureDatabaseSeeded } from '@/lib/seed';
 import mongoose from 'mongoose';
 
 /**
@@ -31,6 +32,16 @@ export async function GET(req: NextRequest) {
             .populate('resolvedBy', 'name email')
             .sort({ createdAt: -1 });
 
+          if (incidents.length === 0 && !severity && !status && !environment) {
+            await ensureDatabaseSeeded().catch(() => {});
+            incidents = await Incident.find(filter)
+              .populate('resourceId', 'name environment status')
+              .populate('deploymentId', 'version status')
+              .populate('createdBy', 'name email')
+              .populate('resolvedBy', 'name email')
+              .sort({ createdAt: -1 });
+          }
+
           if (environment) {
             incidents = incidents.filter((inc) => {
               const res = inc.resourceId as { environment?: string } | null;
@@ -38,7 +49,9 @@ export async function GET(req: NextRequest) {
             });
           }
 
-          return NextResponse.json(incidents);
+          if (incidents.length > 0) {
+            return NextResponse.json(incidents);
+          }
         }
       } catch (dbErr) {
         console.warn('DB fetch incidents error, using mock store:', dbErr);

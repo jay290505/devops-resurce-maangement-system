@@ -67,6 +67,11 @@ async function dbConnect(): Promise<typeof mongoose | null> {
 
   try {
     cached.conn = await cached.promise;
+    if (cached.conn) {
+      import('@/lib/seed')
+        .then((m) => m.ensureDatabaseSeeded())
+        .catch(() => {});
+    }
     return cached.conn;
   } catch (error) {
     cached.promise = null;
