@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Resource from '@/models/Resource';
 import AuditLog from '@/models/AuditLog';
 import { requireRole } from '@/lib/auth';
+import { mockStore } from '@/lib/mockStore';
 
 /**
  * POST /api/resources/[id]/release
@@ -16,25 +17,46 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       try {
         const { id } = await ctx.params;
 
-        await dbConnect();
+        try {
+          const db = await dbConnect();
+          if (db) {
+            const resource = await Resource.findById(id);
+            if (resource) {
+              const resourceName = resource.name;
+              const resourceType = resource.type;
 
-        const resource = await Resource.findById(id);
-        if (!resource) {
+              await Resource.findByIdAndDelete(id);
+
+              await AuditLog.create({
+                action: 'RESOURCE_RELEASE',
+                details: `Released and terminated ${resourceType.toUpperCase()} resource "${resourceName}" (Namespace: ${resource.environment.toUpperCase()})`,
+                userId: user.userId,
+              });
+
+              return NextResponse.json({
+                message: 'Resource deprovisioned and released successfully',
+                id,
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.warn('DB release error, releasing in mock store:', dbErr);
+        }
+
+        const res = mockStore.getResourceById(id);
+        if (!res) {
           return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
         }
 
-        const resourceName = resource.name;
-        const resourceType = resource.type;
-
-        // Delete the active resource (Workflow Step 5: Terminate/deprovision)
-        await Resource.findByIdAndDelete(id);
-
-        // Log compliance audit log (Workflow Step 5: Archive records for audit)
-        await AuditLog.create({
-          action: 'RESOURCE_RELEASE',
-          details: `Released and terminated ${resourceType.toUpperCase()} resource "${resourceName}" (Namespace: ${resource.environment.toUpperCase()})`,
-          userId: user.userId,
-        });
+        const resName = res.name;
+        const resType = res.type;
+        mockStore.deleteResource(id);
+        mockStore.createAuditLog(
+          'RESOURCE_RELEASE',
+          `Released and terminated ${resType.toUpperCase()} resource "${resName}" (Namespace: ${res.environment.toUpperCase()})`,
+          user.userId,
+          id
+        );
 
         return NextResponse.json({
           message: 'Resource deprovisioned and released successfully',

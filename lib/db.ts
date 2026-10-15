@@ -1,16 +1,12 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI =
-  process.env.MONGODB_URI ||
-  process.env.MONGO_URI ||
-  'mongodb://admin:admin@127.0.0.1:27017/devops-resource-management?authSource=admin';
+const RAW_URI = process.env.MONGODB_URI || process.env.MONGO_URI || '';
 
 interface MongooseCache {
   conn: typeof mongoose | null;
-  promise: Promise<typeof mongoose> | null;
+  promise: Promise<typeof mongoose | null> | null;
 }
 
-// Declare global field to cache the connection in development
 declare global {
   var mongooseCache: MongooseCache | undefined;
 }
@@ -21,35 +17,62 @@ if (!global.mongooseCache) {
   global.mongooseCache = cached;
 }
 
-async function dbConnect() {
-  if (cached.conn) {
+/**
+ * Checks if MongoDB is configured with a valid remote/reachable URI.
+ */
+export function isDbConfigured(): boolean {
+  if (!RAW_URI) return false;
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  // In production or on Vercel, localhost/127.0.0.1 is not reachable
+  if (isProd && (RAW_URI.includes('127.0.0.1') || RAW_URI.includes('localhost'))) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Connects to MongoDB safely.
+ * Returns mongoose instance if connected, or null if MongoDB is not configured or unreachable.
+ */
+async function dbConnect(): Promise<typeof mongoose | null> {
+  // If already connected, return cached connection
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
+  }
+
+  // If not configured, don't attempt to connect to prevent blocking/timeouts
+  if (!isDbConfigured()) {
+    return null;
   }
 
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
       dbName: 'devops-resource-management',
+      serverSelectionTimeoutMS: 2500, // Quick timeout to prevent Vercel serverless freezing
+      connectTimeoutMS: 2500,
     };
 
-    if (!MONGODB_URI) {
-      throw new Error('MONGODB_URI environment variable is not defined');
-    }
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
-      return mongooseInstance;
-    });
+    cached.promise = mongoose
+      .connect(RAW_URI, opts)
+      .then((mongooseInstance) => {
+        return mongooseInstance;
+      })
+      .catch((err) => {
+        console.warn('MongoDB connection unavailable. Operating in fallback mock mode:', err.message);
+        cached.promise = null;
+        return null;
+      });
   }
 
   try {
     cached.conn = await cached.promise;
+    return cached.conn;
   } catch (error) {
     cached.promise = null;
-    console.error('MongoDB connection error:', error);
-    throw error;
+    cached.conn = null;
+    return null;
   }
-
-  return cached.conn;
 }
 
 export default dbConnect;

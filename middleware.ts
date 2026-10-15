@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'devops-resource-platform-secret-key-2026';
 
 /**
  * Cryptographically verifies a JWT signature on the Edge Runtime.

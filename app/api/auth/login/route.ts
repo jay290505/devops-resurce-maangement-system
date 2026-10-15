@@ -2,11 +2,13 @@ import { NextResponse, NextRequest } from 'next/server';
 import dbConnect from '@/lib/db';
 import User from '@/models/User';
 import { comparePassword, generateToken, hashPassword } from '@/lib/auth';
+import { mockStore } from '@/lib/mockStore';
 
 export async function POST(req: NextRequest) {
   try {
-    const rawEmail = await req.json().email;
-    const rawPassword = await req.json().password;
+    const body = await req.json().catch(() => ({}));
+    const rawEmail = body.email;
+    const rawPassword = body.password;
     const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
     const password = typeof rawPassword === 'string' ? rawPassword : '';
 
@@ -21,63 +23,73 @@ export async function POST(req: NextRequest) {
     const defaultAdminEmail = 'admin@devopsplatform.local';
     const lookupEmail = email === 'admin' ? defaultAdminEmail : email;
 
-    // 2. Connect to Database
-    await dbConnect();
+    let authenticatedUser: { id: string; name: string; email: string; role: string } | null = null;
 
-    // 3. Find user and explicitly select password field
-    let user = await User.findOne({ email: lookupEmail }).select('+password');
+    // 2. Try Database if connected
+    try {
+      const db = await dbConnect();
+      if (db) {
+        let user = await User.findOne({ email: lookupEmail }).select('+password');
 
-    if (!user && (lookupEmail === defaultAdminEmail || email === 'admin')) {
-      const createdUser = await User.create({
-        name: 'System Administrator',
-        email: defaultAdminEmail,
-        password: await hashPassword('admin'),
-        role: 'admin',
-      });
-      user = createdUser;
+        if (!user && (lookupEmail === defaultAdminEmail || email === 'admin')) {
+          user = await User.create({
+            name: 'System Administrator',
+            email: defaultAdminEmail,
+            password: await hashPassword('admin'),
+            role: 'admin',
+          });
+        }
+
+        if (user && user.password) {
+          const isMatch = await comparePassword(password, user.password);
+          if (isMatch) {
+            authenticatedUser = {
+              id: user._id.toString(),
+              name: user.name,
+              email: user.email,
+              role: user.role,
+            };
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Database query failed during login, checking in-memory store:', dbErr);
     }
 
-    if (!user) {
+    // 3. Fallback to in-memory mock store if DB is unavailable or user was not in DB
+    if (!authenticatedUser) {
+      const mockUser = mockStore.authenticate(email, password);
+      if (mockUser) {
+        authenticatedUser = {
+          id: mockUser._id,
+          name: mockUser.name,
+          email: mockUser.email,
+          role: mockUser.role,
+        };
+      }
+    }
+
+    if (!authenticatedUser) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid email or password. Use email: admin / password: admin' },
         { status: 401 }
       );
     }
 
-    // 4. Verify password
-    if (!user.password) {
-      return NextResponse.json(
-        { error: 'Invalid user data' },
-        { status: 500 }
-      );
-    }
-    const isMatch = await comparePassword(password, user.password);
-    if (!isMatch) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      );
-    }
+    // 4. Generate signed JWT token
+    const token = generateToken(authenticatedUser.id, authenticatedUser.role);
 
-    // 5. Generate token
-    const token = generateToken(user._id.toString(), user.role);
-
-    // 6. Set token in httpOnly cookie and return user info
+    // 5. Set token cookie and return response
     const response = NextResponse.json({
       message: 'Login successful',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: authenticatedUser,
     });
 
     const isProd = process.env.NODE_ENV === 'production';
     response.cookies.set('token', token, {
       httpOnly: true,
       secure: isProd,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });

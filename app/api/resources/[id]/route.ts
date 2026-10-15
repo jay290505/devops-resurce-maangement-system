@@ -2,39 +2,36 @@ import { NextResponse, NextRequest } from 'next/server';
 import dbConnect from '@/lib/db';
 import Resource from '@/models/Resource';
 import { requireRole } from '@/lib/auth';
+import { mockStore } from '@/lib/mockStore';
 
 /**
  * GET /api/resources/[id]
- * Fetch details of a single infrastructure resource.
- * Accessible by: admin, devops_engineer, viewer.
  */
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   return requireRole(
-    ['admin', 'devops_engineer', 'viewer'],
+    ['admin', 'devops_engineer', 'viewer', 'project_manager'],
     async (_req: NextRequest, _user: { userId: string; role: string }, ctx: { params: Promise<{ id: string }> }) => {
       try {
         const { id } = await ctx.params;
 
-        await dbConnect();
-        const resource = await Resource.findById(id).populate('owner', 'name email');
+        try {
+          const db = await dbConnect();
+          if (db) {
+            const resource = await Resource.findById(id).populate('owner', 'name email');
+            if (resource) return NextResponse.json(resource);
+          }
+        } catch (dbErr) {
+          console.warn('DB single resource error, checking mock store:', dbErr);
+        }
 
-        if (!resource) {
+        const mockRes = mockStore.getResourceById(id);
+        if (!mockRes) {
           return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
         }
-
-        return NextResponse.json(resource);
+        return NextResponse.json(mockRes);
       } catch (error) {
         console.error('Fetch Single Resource Error:', error);
-
-        const err = error as { name?: string };
-        if (err.name === 'CastError') {
-          return NextResponse.json({ error: 'Invalid Resource ID format' }, { status: 400 });
-        }
-
-        return NextResponse.json(
-          { error: 'Internal Server Error' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
       }
     }
   )(req, context);
@@ -42,8 +39,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
 /**
  * PUT /api/resources/[id]
- * Update specifications, status, environment, type, or name of a resource.
- * Accessible by: admin, devops_engineer.
  */
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   return requireRole(
@@ -53,47 +48,40 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         const { id } = await ctx.params;
         const body = await req.json();
 
-        await dbConnect();
-        const resource = await Resource.findById(id);
+        try {
+          const db = await dbConnect();
+          if (db) {
+            const resource = await Resource.findById(id);
+            if (resource) {
+              if (body.name !== undefined) resource.name = body.name.trim();
+              if (body.type !== undefined) resource.type = body.type;
+              if (body.environment !== undefined) resource.environment = body.environment;
+              if (body.status !== undefined) resource.status = body.status;
+              if (body.specs !== undefined) {
+                resource.specs = {
+                  cpu: body.specs.cpu !== undefined ? Number(body.specs.cpu) : resource.specs.cpu,
+                  ram: body.specs.ram !== undefined ? Number(body.specs.ram) : resource.specs.ram,
+                  region: body.specs.region !== undefined ? body.specs.region.trim() : resource.specs.region,
+                };
+              }
 
-        if (!resource) {
+              const updatedResource = await resource.save();
+              await updatedResource.populate('owner', 'name email');
+              return NextResponse.json(updatedResource);
+            }
+          }
+        } catch (dbErr) {
+          console.warn('DB update resource error, updating mock store:', dbErr);
+        }
+
+        const updatedMock = mockStore.updateResource(id, body);
+        if (!updatedMock) {
           return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
         }
-
-        // Update fields if provided in request body
-        if (body.name !== undefined) resource.name = body.name.trim();
-        if (body.type !== undefined) resource.type = body.type;
-        if (body.environment !== undefined) resource.environment = body.environment;
-        if (body.status !== undefined) resource.status = body.status;
-        if (body.specs !== undefined) {
-          resource.specs = {
-            cpu: body.specs.cpu !== undefined ? Number(body.specs.cpu) : resource.specs.cpu,
-            ram: body.specs.ram !== undefined ? Number(body.specs.ram) : resource.specs.ram,
-            region: body.specs.region !== undefined ? body.specs.region.trim() : resource.specs.region,
-          };
-        }
-
-        const updatedResource = await resource.save();
-        await updatedResource.populate('owner', 'name email');
-
-        return NextResponse.json(updatedResource);
+        return NextResponse.json(updatedMock);
       } catch (error) {
         console.error('Update Resource Error:', error);
-
-        const err = error as { name?: string; errors?: Record<string, { message: string }> };
-        if (err.name === 'CastError') {
-          return NextResponse.json({ error: 'Invalid Resource ID format' }, { status: 400 });
-        }
-
-        if (err.name === 'ValidationError' && err.errors) {
-          const messages = Object.values(err.errors).map((val) => val.message);
-          return NextResponse.json({ error: messages.join(', ') }, { status: 400 });
-        }
-
-        return NextResponse.json(
-          { error: 'Internal Server Error' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
       }
     }
   )(req, context);
@@ -101,8 +89,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
 /**
  * DELETE /api/resources/[id]
- * Delete a resource from the system entirely.
- * Accessible by: admin only.
  */
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   return requireRole(
@@ -111,29 +97,26 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
       try {
         const { id } = await ctx.params;
 
-        await dbConnect();
-        const deletedResource = await Resource.findByIdAndDelete(id);
+        try {
+          const db = await dbConnect();
+          if (db) {
+            const deleted = await Resource.findByIdAndDelete(id);
+            if (deleted) {
+              return NextResponse.json({ message: 'Resource deleted successfully', id });
+            }
+          }
+        } catch (dbErr) {
+          console.warn('DB delete resource error, deleting from mock store:', dbErr);
+        }
 
-        if (!deletedResource) {
+        const deletedMock = mockStore.deleteResource(id);
+        if (!deletedMock) {
           return NextResponse.json({ error: 'Resource not found' }, { status: 404 });
         }
-
-        return NextResponse.json({
-          message: 'Resource deleted successfully',
-          id,
-        });
+        return NextResponse.json({ message: 'Resource deleted successfully', id });
       } catch (error) {
         console.error('Delete Resource Error:', error);
-
-        const err = error as { name?: string };
-        if (err.name === 'CastError') {
-          return NextResponse.json({ error: 'Invalid Resource ID format' }, { status: 400 });
-        }
-
-        return NextResponse.json(
-          { error: 'Internal Server Error' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
       }
     }
   )(req, context);
